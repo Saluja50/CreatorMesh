@@ -14,5 +14,12 @@ class WorkflowState(TypedDict):
     revision_count: int
 
     fact_check_results: list[dict]
-
+    
     status: str
+
+
+    editor_approved: bool
+
+    human_feedback: str
+
+    human_revision_count: int

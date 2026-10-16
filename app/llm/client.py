@@ -10,7 +10,7 @@ from app.config.settings import OPENAI_API_KEY
 
 def get_llm():
     return ChatOpenAI(
-        model="gpt-5-nano",
+        model="gpt-4o-mini",
         api_key=OPENAI_API_KEY,
         temperature=0,
     )
