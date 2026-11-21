@@ -1,4 +1,5 @@
 from typing import TypedDict
+from unittest import result
 
 from langgraph.graph import END, START, StateGraph
 from app.models.planner import ContentPlan
@@ -6,6 +7,8 @@ from app.llm.client import get_llm
 from app.graph.state import WorkflowState
 from app.agents.editor import review_draft
 from app.graph.human_review import get_human_feedback
+from app.agents.fact_checker import fact_check_claims
+
 
 State = WorkflowState
 
@@ -57,14 +60,25 @@ def researcher_node(state: State):
         "status": "RESEARCH_COMPLETED",
     }
 
+def fact_checker_node(state: State):
+    result = fact_check_claims(
+        draft=state["draft"],
+        research=state["research"],
+    )
+    print("\n--- FACT CHECK RESULTS ---")
+    print(result)
 
+    return {
+        "fact_check_results": [result],
+        "status": "FACT_CHECK_COMPLETED",
+    }
 
 def writer_node(state: State):
     llm = get_llm()
 
     feedback = state.get("editor_feedback", [])
     human_feedback = state.get("human_feedback", "").strip()
-
+    fact_check_results = state.get("fact_check_results", [])
     
     if human_feedback and human_feedback.lower() != "approve":
         instruction = f"""
@@ -115,6 +129,9 @@ Previous draft:
     "revision_count": state.get("revision_count", 0) + 1,
     "human_feedback": "",
 }
+
+
+
 def editor_node(state: State):
     result = review_draft(
         draft=state["draft"],
@@ -133,13 +150,38 @@ def editor_node(state: State):
     }
 
 
+def route_after_fact_checker(state: State):
+    results = state.get("fact_check_results", [])
 
+    if not results:
+        return "editor"
 
+    latest_result = results[-1]
+    checks = latest_result.get("checks", [])
+
+    has_unsupported = any(
+        check.get("status") in {"unsupported", "uncertain"}
+        for check in checks
+    )
+
+    if has_unsupported:
+        if state.get("fact_revision_count", 0) < 1:
+            return "revise"
+        return "human_review"
+
+    return "editor"
+
+def mark_fact_revision(state: State):
+    return {
+        "fact_revision_count": state.get("fact_revision_count", 0) + 1,
+        "fact_check_revision_requested": True,
+    }
 
 def route_after_editor(state: State):
     if state.get("editor_approved"):
         return "end"
 
+    # Human-guided revision ke baad Editor ka decision final hai
     if state.get("human_revision_count", 0) > 0:
         return "end"
 
@@ -148,8 +190,9 @@ def route_after_editor(state: State):
 
     return "revise"
 
+
 def route_after_human_review(state: State):
-    if state.get("editor_approved"):
+    if state.get("human_feedback", "").lower() == "approve":
         return "end"
 
     if state.get("human_revision_count", 0) > 0:
@@ -186,14 +229,28 @@ graph_builder = StateGraph(State)
 graph_builder.add_node("planner", planner_node)
 graph_builder.add_node("researcher", researcher_node)
 graph_builder.add_node("writer", writer_node)
+graph_builder.add_node("fact_checker", fact_checker_node)
 graph_builder.add_node("editor", editor_node)
-# graph_builder.add_node("revision_limit", revision_limit_node)
 graph_builder.add_node("human_review", human_review_node)
+graph_builder.add_node("mark_fact_revision", mark_fact_revision)
+
 
 graph_builder.add_edge(START, "planner")
 graph_builder.add_edge("planner", "researcher")
 graph_builder.add_edge("researcher", "writer")
-graph_builder.add_edge("writer", "editor")
+graph_builder.add_edge("writer", "fact_checker")
+
+graph_builder.add_conditional_edges(
+    "fact_checker",
+    route_after_fact_checker,
+    {
+        "revise": "mark_fact_revision",
+        "editor": "editor",
+        "human_review": "human_review",
+    },
+)
+
+graph_builder.add_edge("mark_fact_revision", "writer")
 
 
 graph_builder.add_conditional_edges(
@@ -221,27 +278,27 @@ graph = graph_builder.compile()
 if __name__ == "__main__":
     print(graph.get_graph().draw_mermaid())
 
-if __name__ == "__main__":
     result = graph.invoke({
-    "topic": "ICPC programming competitions",
-    "platform": "LinkedIn",
-    "target_audience": "Computer science students",
-    "plan": {},
-    "research": {},
-    "draft": "",
-    "editor_feedback": [],
-    "editor_approved": False,
-    "revision_count": 0,
-    "fact_check_results": [],
-    "status": "STARTED",
-    "human_feedback": "",
-"human_revision_count": 0,
-})
+        "topic": "ICPC programming competitions",
+        "platform": "LinkedIn",
+        "target_audience": "Computer science students",
+        "plan": {},
+        "research": {},
+        "draft": "",
+        "editor_feedback": [],
+        "editor_approved": False,
+        "revision_count": 0,
+        "fact_check_results": [],
+        "fact_revision_count": 0,
+        "fact_check_revision_requested": False,
+        "status": "STARTED",
+        "human_feedback": "",
+        "human_revision_count": 0,
+    })
 
-    print(result)
-    print("Status:", result.get("status"))
-    print("Human feedback:", result.get("human_feedback"))
-    print("Editor approved:", result.get("editor_approved"))
-    print("Human revisions:", result.get("human_revision_count"))
-
+print("\n--- FINAL RESULT ---")
+print("Draft:\n", result.get("draft"))
+print("Status:", result.get("status"))
+print("Editor approved:", result.get("editor_approved"))
+print("Human revisions:", result.get("human_revision_count"))
 

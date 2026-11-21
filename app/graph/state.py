@@ -14,6 +14,8 @@ class WorkflowState(TypedDict):
     revision_count: int
 
     fact_check_results: list[dict]
+    fact_revision_count: int
+    fact_check_revision_requested: bool
     
     status: str
 
@@ -23,3 +25,5 @@ class WorkflowState(TypedDict):
     human_feedback: str
 
     human_revision_count: int
+
+    
