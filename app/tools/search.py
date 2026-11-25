@@ -12,7 +12,7 @@ def search_web(query: str) -> str:
 
     response = client.search(
         query=query,
-        max_results=3,
+        max_results=5,
         search_depth="advanced",
     )
 

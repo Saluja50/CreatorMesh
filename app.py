@@ -124,8 +124,19 @@ if "workflow_result" in st.session_state:
     if fact_results:
         for index, check in enumerate(fact_results, start=1):
             with st.container(border=True):
-                st.markdown(f"**Claim {index}**")
-                st.write(check)
+                st.markdown(f"**Fact Check Run {index}**")
+
+                checks = check.get("checks", [])
+
+                if not checks:
+                    st.info("No factual claims identified.")
+
+                for claim_index, claim in enumerate(checks, start=1):
+                    st.markdown(f"**Claim {claim_index}**")
+                    st.write("Claim:", claim.get("claim"))
+                    st.write("Status:", claim.get("status"))
+                    st.write("Evidence:", claim.get("evidence"))
+                    st.write("Sources:", claim.get("source_urls"))
     else:
         st.info("No fact-check results available.")
     # Agent Activity

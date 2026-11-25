@@ -1,17 +1,16 @@
 
-from typing import Literal
 from pydantic import BaseModel
+from typing import Literal
 
 
-class Source(BaseModel):
-    title: str
-    url: str
+class ResearchClaim(BaseModel):
+    claim: str
     evidence: str
+    source_urls: list[str]
 
 
 class ResearchResult(BaseModel):
-    claims: list[str]
-    sources: list[Source]
+    claims: list[ResearchClaim]
 
 
 class ClaimCheck(BaseModel):
@@ -19,6 +18,7 @@ class ClaimCheck(BaseModel):
     status: Literal["supported", "unsupported", "uncertain"]
     evidence: str
     source_urls: list[str]
+    draft_quote: str
 
 
 class FactCheckResult(BaseModel):
